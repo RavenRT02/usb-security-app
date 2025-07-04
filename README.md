@@ -37,7 +37,7 @@ A secure desktop application that enables or disables USB ports based on user au
 
 ### 1️. Clone the Repo
 ```bash
-git clone https://github.com/yourusername/usb-security-app.git
+git clone https://github.com/RavenRT02/usb-security-app.git
 cd usb-security-app
 ```
 
