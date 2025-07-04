@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USB Security Application</title>
+</head>
+<body>
+    <style>
+        /* CSS styles for the project information page */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            color: #333;
+            text-align: left;
+            margin-bottom: 20px;
+            
+        }
+
+        h2 {
+            color: #444;
+            text-align: left;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        p {
+            color: #555;
+            text-align: justify;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+
+    </style>
+
+    <h1>App Information</h1>
+
+    <p> </p>
+
+    <p>This page contains information about the functions and buttons in the application</p>
+
+    <p> </p>
+
+        <table>
+        <tr><th>Buttons/Functions/Quesstions</th><th>Information/Answers</th></tr>
+        <tr><td>About button</td><td>Redirects to this page containing information about the app</td></tr>
+        <tr><td>Project info button</td><td>Redirects to a page that contains information about the project</td></tr>
+        <tr><td>USB status button</td><td>Displays the current status of the USB ports (enabled/disabled)</td></tr>
+        <tr><td>Check logs button</td><td>Opens a window that displays all notable actions performed in the app and the logs can be exported</td></tr>
+        <tr><td>Disable USB button</td><td>Disables USB ports of the device after verifying randomly generated password</td></tr>
+        <tr><td>Enable USB button</td><td>Enables USB ports of the device after verifying randomly generated password</td></tr>
+        <tr><td>Does the app require internet access ?</td><td>Yes, to send OTP and random password emails</td></tr>
+        <tr><td>Does the app require camera permissions ?</td><td>Yes, if the user requires images of intruders entering wrong passwords more than three times to enable/diable USB option</td></tr>
+        <tr><td>Does the app require admin access?</td><td>Yes, admin access is crucial for Enable and Disable USB ports functionality</td></tr>
+    </table>
+</body>
+</html>
