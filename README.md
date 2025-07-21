@@ -91,7 +91,7 @@ pyinstaller main.py --noconfirm --onefile --windowed --icon=icon/app.ico --name 
 ```
 icon file is not included in the repository 
 
-## Screenshots (Optional)
+## Screenshots
 
 ![App Screenshot](assets/app_registration_screen.png)
 ![App Screenshot](assets/app_login_screen.png)
