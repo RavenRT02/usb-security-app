@@ -89,9 +89,9 @@ pip install pyinstaller
 
 pyinstaller main.py --noconfirm --onefile --windowed --icon=icon/app.ico --name "USB Security App"
 ```
-icon file is not included in the repository 
+Icon file is not included in the repository 
 
-## Screenshots (Optional)
+## Screenshots
 
 ![App Screenshot](assets/app_registration_screen.png)
 ![App Screenshot](assets/app_login_screen.png)
