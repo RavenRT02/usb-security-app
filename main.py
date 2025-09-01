@@ -19,9 +19,10 @@ from email.mime.multipart import MIMEMultipart
 from cryptography.fernet import Fernet
 import json
 import ctypes
-
-ctk.set_appearance_mode("Dark")
-ctk.set_default_color_theme("dark-blue")
+import threading
+import pyautogui
+import tempfile, shutil
+from pathlib import Path
 
 #Works as exe file not when run normally due to microsoft sandbox 
 def get_app_data_dir():
@@ -357,7 +358,6 @@ class RegisterWindow(ctk.CTkToplevel):
 
 class USBLogger:
     log_file = os.path.join(folder, "usb_log.txt")
-    print(f"[DEBUG] Log file path: {log_file}")
 
     @staticmethod
     def log_action(action):
@@ -366,24 +366,37 @@ class USBLogger:
             file.write(f"{timestamp} - {action}\n")
 
     @staticmethod
-    def capture_failed_attempt_images(reason="login"):
-        try:
-            cam = cv2.VideoCapture(0)
-            if not cam.isOpened():
-                USBLogger.log_action("Webcam not available for failed attempt capture.")
-                return
-            for i in range(3):
-                ret, frame = cam.read()
-                if ret:
-                    timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
-                    filename = f"failed_{reason}_{timestamp}_{i+1}.jpg"
-                    cv2.imwrite(filename, frame)
-                    USBLogger.log_action(f"Captured webcam image: {filename}")
-                time.sleep(1)
-            cam.release()
-            cv2.destroyAllWindows()
-        except Exception as e:
-            USBLogger.log_action(f"Webcam capture error: {str(e)}")
+    def capture_failed_attempt_images(reason="login", webcam_enabled=True):
+        """Capture intruder images with webcam. If webcam disabled/unavailable, just log it."""
+        if not webcam_enabled:
+            USBLogger.log_action("Intruder capture skipped — webcam disabled.")
+            return
+
+        def run():
+            try:
+                cam = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+                if not cam.isOpened():
+                    USBLogger.log_action("Webcam unavailable — capture skipped.")
+                    return
+
+                for i in range(3):  # capture a few frames
+                    ret, frame = cam.read()
+                    if ret:
+                        timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
+                        filename = os.path.join(folder, f"failed_{reason}_{timestamp}_{i+1}.jpg")
+                        cv2.imwrite(filename, frame)
+                        USBLogger.log_action(f"Captured webcam image: {filename}")
+                    else:
+                        USBLogger.log_action("Webcam frame read failed.")
+                    time.sleep(1)
+
+                cam.release()
+                cv2.destroyAllWindows()
+
+            except Exception as e:
+                USBLogger.log_action(f"Webcam capture error: {str(e)}")
+
+        threading.Thread(target=run, daemon=True).start()
 
     @staticmethod
     def get_log_content():
@@ -455,22 +468,44 @@ class USBManager:
 
 class Info:
     @staticmethod
-    def resource_path(relative_path):
+    def resource_path(relative_path: str) -> str:
+        """Return absolute path to resource, works for dev & PyInstaller bundle"""
         try:
-            base_path = sys._MEIPASS
+            base_path = sys._MEIPASS   # PyInstaller temp folder (admin context)
         except Exception:
-            base_path = os.path.abspath(".")
+            base_path = os.path.abspath(".")  # Fallback in dev
         return os.path.join(base_path, relative_path)
 
     @staticmethod
+    def get_shared_temp() -> str:
+        """Return a folder accessible to all users."""
+        shared = os.path.join(os.environ.get("PUBLIC", r"C:\Users\Public"), "usb_security", "temp")
+        os.makedirs(shared, exist_ok=True)
+        return shared
+
+    @staticmethod
+    def open_html(filename: str):
+        """Safely open an HTML file in the default browser, copying it
+        to a shared folder accessible to Admin + Student."""
+        src_path = Info.resource_path(filename)
+
+        if not os.path.exists(src_path):
+            raise FileNotFoundError(f"Resource not found: {src_path}")
+
+        # Copy into shared public folder
+        dst_path = os.path.join(Info.get_shared_temp(), filename)
+        shutil.copyfile(src_path, dst_path)
+
+        # Open via file:// URI
+        webbrowser.open(Path(dst_path).as_uri())
+
+    @staticmethod
     def open_project_info():
-        path = Info.resource_path("project_info.html")
-        webbrowser.open(f"file://{os.path.abspath(path)}")
+        Info.open_html("project_info.html")
 
     @staticmethod
     def open_about_app():
-        path = Info.resource_path("about_app.html")
-        webbrowser.open(f"file://{os.path.abspath(path)}")
+        Info.open_html("about_app.html")
 
 class LogWindow:
     def __init__(self, master):
@@ -823,11 +858,12 @@ class ForgotPasswordWindow(ctk.CTkToplevel):
         self.destroy()
 
 class MainAppWindow:
-    def __init__(self, master):
+    def __init__(self, master, webcam_enabled = True):
         self.master = master
         self.main_app = ctk.CTkToplevel(master)
         self.main_app.title("USB Security")
         self.main_app.geometry("600x450")
+        self.webcam_enabled = webcam_enabled
         self.setup_ui()
 
     def setup_ui(self):
@@ -887,10 +923,10 @@ class MainAppWindow:
         discon_button.grid(row=0, column=0, pady=10, padx=10)
 
     def enable_usb(self):
-        PasswordPrompt(self.main_app, USBManager.enable_usb, "Enabled USB Ports")
+        PasswordPrompt(self.main_app, USBManager.enable_usb, "Enabled USB Ports", webcam_enabled = self.webcam_enabled)
 
     def disable_usb(self):
-        PasswordPrompt(self.main_app, USBManager.disable_usb, "Disabled USB Ports")
+        PasswordPrompt(self.main_app, USBManager.disable_usb, "Disabled USB Ports", webcam_enabled = self.webcam_enabled)
 
 class PasswordPrompt:
     temp_password = None
@@ -898,10 +934,11 @@ class PasswordPrompt:
     last_request_time = 0
     rate_limit_seconds = 120  # 2 minutes
 
-    def __init__(self, master, action, log_message):
+    def __init__(self, master, action, log_message, webcam_enabled = True):
         self.master = master
         self.action = action
         self.log_message = log_message
+        self.webcam_enabled = webcam_enabled
         self.failed_attempts = [0]
         self.password_window = ctk.CTkToplevel(master)
         self.password_window.title("Enter Password")
@@ -1001,23 +1038,31 @@ class PasswordPrompt:
         if (PasswordPrompt.temp_password and
             now < PasswordPrompt.temp_password_expiry and
             entered == PasswordPrompt.temp_password):
+
             self.action()
             self.password_window.destroy()
+
             msg.CTkMessagebox(title="Success", message=f"USB Storage Devices {self.log_message.split()[0]}", icon="check", option_1="OK")
             # Invalidate the temp password after use
             PasswordPrompt.temp_password = None
             PasswordPrompt.temp_password_expiry = 0
             PasswordPrompt.last_request_time = 0
-        else:
-            self.failed_attempts[0] += 1
-            USBLogger.log_action(f'Incorrect Password Attempt to {self.log_message.lower()}, Attempt - {self.failed_attempts[0]}')
-            msg.CTkMessagebox(title="Error", message="Incorrect or expired password.", icon="cancel", option_1="OK")
-            self.password_entry.delete(0, ctk.END)
-            if self.failed_attempts[0] >= 3:
-                USBLogger.capture_failed_attempt_images("usb")
-                self.failed_attempts[0] = 0  # reset after capture
+            return
+        
+        self.failed_attempts[0] += 1
+        USBLogger.log_action(f'Incorrect OTP attempt to {self.log_message.lower()}, Attempt - {self.failed_attempts[0]}')
+
+        msg.CTkMessagebox(title="Error", message="Incorrect or expired OTP.", icon="cancel", option_1="OK")
+
+        self.password_entry.delete(0, ctk.END)
+
+        # After 3 failed attempts → capture intruder images
+        if self.failed_attempts[0] >= 3:
+            USBLogger.capture_failed_attempt_images(reason="usb", webcam_enabled=self.webcam_enabled)
+            self.failed_attempts[0] = 0  # reset after capture
 
 class USBApp:
+
     def __init__(self):
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("dark-blue")
@@ -1027,29 +1072,44 @@ class USBApp:
         self.root.title("USB Security App")
         self.register_window = None
         self.login_window = None
-
-        cam = cv2.VideoCapture(0)
-        if not cam.isOpened():
-            msg.CTkMessagebox(
-                title="Camera Permission Required",
-                message="This app needs access to your webcam for security features.\n\nPlease allow camera access and restart the app.",
-                icon="cancel",
-                option_1="OK"
-            )
-        else:
-            ret, frame = cam.read()
-            cam.release()
-            if not ret:
-                msg.CTkMessagebox(
-                    title="Camera Error",
-                    message="Unable to access the webcam. Please check your camera permissions.",
-                    icon="cancel",
-                    option_1="OK"
-                )
-
+        
+        self.webcam_enabled = False
 
         self.setup_ui()
+
+        # Start camera permission check AFTER UI shows
+        self.root.after(500, self.check_camera_async)  
+
         self.root.mainloop()
+
+    def check_webcam(self):
+
+        cam = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+
+        if not cam.isOpened():
+            USBLogger.log_action("Webcam not available — intruder detection disabled.")
+            msg.CTkMessagebox(
+                title="Webcam Disabled",
+                message="No camera detected or access denied.\nIntruder detection will be disabled.",
+                icon="warning",
+                option_1="OK"
+            )
+            return
+
+        ret, frame = cam.read()
+        cam.release()
+
+        if not ret:
+            USBLogger.log_action("Webcam access failed — intruder detection disabled.")
+            msg.CTkMessagebox(
+                title="Webcam Access Failed",
+                message="Unable to read from the camera.\nIntruder detection will be disabled.",
+                icon="warning",
+                option_1="OK"
+            )
+            return
+        self.webcam_enabled = True
+        USBLogger.log_action("Webcam available — intruder detection enabled.")
 
     def setup_ui(self):
         # Remove all widgets if re-calling this method
@@ -1071,6 +1131,34 @@ class USBApp:
             self.register_btn = ctk.CTkButton(button_frame, text="Register", width=100, command=self.launch_register)
             self.register_btn.pack(side="left", padx=20)
 
+    def check_camera_async(self):
+        """Check camera without blocking the UI"""
+        def run():
+            try:
+                cam = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # Faster on Windows
+                if not cam.isOpened():
+                    self.show_camera_error(
+                        "Camera Permission Required",
+                        "This app needs access to your webcam for security features.\n\n"
+                        "Please allow camera access and restart the app."
+                    )
+                    return
+
+                ret, _ = cam.read()
+                cam.release()
+
+                if not ret:
+                    self.show_camera_error("Camera Error","Unable to access the webcam. Please check your camera permissions.")
+
+            except Exception as e:
+                self.show_camera_error("Camera Error", f"Unexpected error: {e}")
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def show_camera_error(self, title, message):
+        """Show messagebox from UI thread"""
+        self.root.after(0, lambda: msg.CTkMessagebox(title=title, message=message, icon="cancel", option_1="OK"))
+
     def launch_login(self):
         if self.login_window is not None and self.login_window.winfo_exists():
             self.login_window.focus()
@@ -1091,19 +1179,24 @@ class USBApp:
             self.register_window.focus()
             return
         self.register_btn.configure(state="disabled")
+
         def on_register_close():
             self.register_window = None
             self.setup_ui()
             self.launch_login()
+
         self.register_window = RegisterWindow()
         self.register_window.protocol("WM_DELETE_WINDOW", lambda: [self.register_window.destroy(), on_register_close()])
+
         # Patch register_user to call on_register_close after success
         orig_register_user = self.register_window.register_user
+
         def patched_register_user():
             orig_register_user()
             if UserManager.is_registered():
                 self.register_window.destroy()
                 on_register_close()
+
         self.register_window.register_user = patched_register_user
         # Patch the Register button to use the patched method
         for widget in self.register_window.winfo_children():
@@ -1112,7 +1205,7 @@ class USBApp:
 
     def open_app(self):
         self.root.withdraw()
-        MainAppWindow(self.root)
+        MainAppWindow(self.root, webcam_enabled= self.webcam_enabled)
 
 # --- App Entry ---
 if __name__ == "__main__":
